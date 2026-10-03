@@ -13,13 +13,19 @@ reproduce.
 - **Grilla de apps** con los iconos reales del dispositivo: Maps, Waze,
   Spotify, Amazon Music, etc.
 - Se puede fijar como **pantalla de inicio** del head unit.
+- **Tablero de 1 a 4 paneles**: música local, biblioteca, cola y versiones web
+  de YouTube, YouTube Music o Maps. Toca **Cambiar** en cada panel para elegir
+  el contenido; el estilo y la distribución se conservan al reiniciar.
+- **Tres estilos de música**: Dial (espectro real), Carátula y Ambiente.
+- **Modos de apertura visibles** en Apps: Dentro del launcher (web), Al lado
+  (multiventana Android) y Pantalla completa.
 
 ---
 
-## Tres cosas que Android no permite, y cómo las resuelve esta app
+## Compatibilidad, ventanas y permisos
 
-Conviene tenerlas claras antes de probar, porque no son limitaciones del
-código sino del sistema.
+El comportamiento de las ventanas y los permisos depende de la versión de
+Android y del fabricante de la radio.
 
 ### 1. Esto no es una app de Android Auto
 
@@ -31,26 +37,42 @@ El objetivo real es otro y funciona perfecto: **una radio o tablet con Android
 completo** (los head units que se instalan en el tablero). Ahí la app corre a
 pantalla completa y puede ser el launcher del sistema.
 
-### 2. No se puede incrustar Spotify ni Maps dentro de la app
+### 2. Paneles internos y apps Android tienen distinto soporte
 
-No existe API para eso en ningún nivel de permisos. Solo el sistema puede
-componer dos apps en pantalla.
+Los cuatro paneles del tablero muestran pantallas propias o páginas web
+mediante WebView; no alojan las apps Android instaladas. YouTube y Maps web
+son accesibles incluso si sus apps no están instaladas. El inicio de sesión,
+la reproducción y otras funciones pueden estar limitados por cada servicio;
+Maps web no sustituye la navegación GPS de la app nativa. Los controles
+inferiores y el visualizador corresponden a la música local.
 
-Lo que sí se usa es el **multiventana nativo**: `launchAdjacent()` manda
-`FLAG_ACTIVITY_LAUNCH_ADJACENT`, que pide a Android poner la app al lado en
-vez de encima. Desde Android 10 ese flag solo surte efecto si **esta app ya
-está en split-screen**, y ninguna API sin privilegios permite entrar a ese
-modo (`setLaunchWindowingMode` es del sistema; la única vía pública es
-`GLOBAL_ACTION_TOGGLE_SPLIT_SCREEN`, que necesita un servicio de
-accesibilidad que el usuario active a mano).
+En **Apps → Al lado · Android**, `launchAdjacent()` solicita
+`FLAG_ACTIVITY_LAUNCH_ADJACENT`. En **Android 12L (API 32) o posterior** puede
+iniciar la división desde pantalla completa. En versiones anteriores coloca
+Console en pantalla dividida desde Recientes primero; la app comprueba el
+modo actual y muestra las instrucciones si hace falta.
 
-En la práctica: **mantené pulsada** una app en la grilla y se abre al lado si
-ya estás en split-screen, y a pantalla completa si no. Para dejarlo en
-split-screen, usá Recientes una vez. La pantalla de Apps lo explica ahí mismo
-para que no parezca un bug.
+El fabricante y la app de destino deciden si aceptan la división; un intent
+exitoso no garantiza que Android haya creado otra ventana. No se prometen
+cuatro apps Android nativas simultáneas. Referencia:
+[Android: soporte multiventana](https://developer.android.com/develop/ui/views/layout/support-multi-window-mode).
 
-Si querés el split de un toque, el camino es escribir un módulo nativo con un
-`AccessibilityService`. Queda fuera de lo que hay hoy acá.
+### Permisos para la biblioteca interna
+
+En **Biblioteca → Permitir acceso**, Android 13 o posterior pide **Música y
+audio** (`READ_MEDIA_AUDIO`); Android anterior pide **Almacenamiento**
+(`READ_EXTERNAL_STORAGE`). Si el permiso quedó bloqueado, **Abrir Ajustes**
+lleva a los permisos de Console. Al volver, se comprueba el acceso y se
+escanea de nuevo sin volver a mostrar el diálogo.
+
+En Android anterior a 13, `modules/console-device` consulta MediaStore con
+solo permiso de lectura. Evita la comprobación de escritura que hace
+`expo-media-library/legacy` aunque solo se quieran leer archivos. En Android
+13 o posterior se conserva el escaneo de audio por la entrada legacy de Expo.
+Los errores de lectura se muestran con un botón para reintentar.
+
+**Estos cambios requieren un APK nuevo**, porque agregan un módulo Android
+local y WebView. Recargar JavaScript sobre un APK antiguo no los incorpora.
 
 ### 3. El visualizador necesita PCM, así que no corre en Expo Go
 
@@ -115,7 +137,7 @@ El plugin `plugins/withCarLauncher.js` es lo que agrega
 
 ```bash
 npm start           # Metro con dev client
-npm test            # 158 tests, sin framework externo
+npm test            # pruebas de lógica, sin framework externo
 npm run typecheck   # tsc --noEmit
 npm run prebuild    # regenera ./android desde app.json
 ```

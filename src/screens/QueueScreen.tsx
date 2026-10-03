@@ -19,9 +19,10 @@ import { color, space, type } from '../theme';
 
 export interface QueueScreenProps {
   onBrowse: () => void;
+  compact?: boolean;
 }
 
-export function QueueScreen({ onBrowse }: QueueScreenProps) {
+export function QueueScreen({ onBrowse, compact = false }: QueueScreenProps) {
   const player = usePlayer();
 
   const tracks = useMemo(() => orderedTracks(player.queue), [player.queue]);
@@ -59,7 +60,7 @@ export function QueueScreen({ onBrowse }: QueueScreenProps) {
 
   return (
     <View style={styles.wrap}>
-      <SectionHeader
+      {!compact ? <SectionHeader
         title="Playing next"
         meta={`${trackCount(tracks.length)} · ${formatRuntime(
           totalDuration(player.queue)
@@ -73,7 +74,7 @@ export function QueueScreen({ onBrowse }: QueueScreenProps) {
             disabled={remaining === 0}
           />
         }
-      />
+      /> : null}
 
       <Seam />
 
@@ -88,11 +89,11 @@ export function QueueScreen({ onBrowse }: QueueScreenProps) {
         contentContainerStyle={styles.list}
       />
 
-      <Text style={styles.hint}>
+      {!compact ? <Text style={styles.hint}>
         {remaining > 0
           ? `${trackCount(remaining)} still to come`
           : 'Last track in the queue'}
-      </Text>
+      </Text> : null}
     </View>
   );
 }

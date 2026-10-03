@@ -6,21 +6,17 @@
  *   Launching works everywhere. An intent with `ACTION_MAIN` plus the
  *   `LAUNCHER` category starts any installed app.
  *
- *   Embedding another app inside our own UI is impossible, by design. No API
- *   exists for it at any permission level, so "Spotify in the right-hand pane"
- *   is not a thing an app can build — only the system can compose two apps.
+ *   Installed apps use Android's own windows. Services with a web version
+ *   can instead be displayed by WebPanel inside the launcher's dashboard.
  *
  *   Side-by-side uses the system's own split-screen. `FLAG_ACTIVITY_LAUNCH_
  *   ADJACENT` asks Android to place the target beside us rather than over us,
- *   but since Android 10 it only takes effect when the caller is *already* in
- *   split-screen mode. Nothing an unprivileged app can call will enter that
- *   mode: `setLaunchWindowingMode` is system-only, and the one public route is
- *   `GLOBAL_ACTION_TOGGLE_SPLIT_SCREEN`, which needs an accessibility service
- *   the user switches on by hand.
+ *   Android 12L (API 32) and later can enter split-screen from full-screen.
+ *   Earlier versions need the caller to be in multi-window first. OEMs and
+ *   target activities can still prevent tiling; four native windows are not
+ *   guaranteed by this API.
  *
- *   So `launchAdjacent` is exactly as good as it can be: beside us when we are
- *   already tiled, full-screen otherwise. The flag is harmless in the second
- *   case, which is why it is always set rather than probed for.
+ *   Check the current window mode on older Android before requesting a split.
  *
  * Package visibility is the other Android-11 wrinkle: every package here has
  * to be declared in the manifest's `<queries>` block or it is invisible to us
@@ -30,6 +26,8 @@ import * as IntentLauncher from 'expo-intent-launcher';
 import { Linking, Platform } from 'react-native';
 
 import type { GlyphName } from '../components/Glyph';
+import type { PanelContent } from '../display/preferences';
+import { device } from './device';
 
 /** `Intent.FLAG_ACTIVITY_NEW_TASK` — required to start another app's task. */
 const FLAG_NEW_TASK = 0x10000000;
@@ -53,6 +51,7 @@ export interface AppEntry {
    * Maps in navigation mode rather than dropping you on the map.
    */
   deepLink?: string;
+  webPanel?: PanelContent;
 }
 
 /**
@@ -64,14 +63,17 @@ export const CATALOG: AppEntry[] = [
     packageName: 'com.google.android.apps.maps',
     label: 'Maps',
     glyph: 'split',
+    webPanel: 'maps',
   },
   { packageName: 'com.waze', label: 'Waze', glyph: 'split' },
   { packageName: 'com.spotify.music', label: 'Spotify', glyph: 'note' },
   { packageName: 'com.amazon.mp3', label: 'Amazon Music', glyph: 'note' },
+  { packageName: 'com.google.android.youtube', label: 'YouTube', glyph: 'note', webPanel: 'youtube' },
   {
     packageName: 'com.google.android.apps.youtube.music',
     label: 'YouTube Music',
     glyph: 'note',
+    webPanel: 'youtube-music',
   },
   { packageName: 'com.android.chrome', label: 'Browser', glyph: 'forward' },
   { packageName: 'com.google.android.deskclock', label: 'Clock', glyph: 'gauge' },
@@ -139,12 +141,11 @@ export async function launchApp(app: AppEntry): Promise<boolean> {
 }
 
 /**
- * Starts an app beside us when we are already in split-screen, and over us
- * when we are not. See the note at the top of this file for why there is no
- * way to guarantee the first case.
+ * Requests Android's adjacent window. OEM support and target resizability
+ * determine the actual placement even when the intent succeeds.
  */
 export async function launchAdjacent(app: AppEntry): Promise<boolean> {
-  if (Platform.OS !== 'android') return false;
+  if (!canLaunchAdjacent()) return false;
 
   try {
     await IntentLauncher.startActivityAsync('android.intent.action.MAIN', {
@@ -166,6 +167,11 @@ export async function launchAdjacent(app: AppEntry): Promise<boolean> {
       return false;
     }
   }
+}
+
+export function canLaunchAdjacent(): boolean {
+  return Platform.OS === 'android' &&
+    (Number(Platform.Version) >= 32 || (device?.isInMultiWindow() ?? false));
 }
 
 /**

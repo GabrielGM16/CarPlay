@@ -26,6 +26,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { PlayerProvider } from './src/audio/PlayerProvider';
+import { DisplayProvider, useDisplay } from './src/display/DisplayProvider';
+import { DashboardScreen } from './src/screens/DashboardScreen';
 import { Rail, type Destination } from './src/components/Rail';
 import { TransportBar } from './src/components/TransportBar';
 import { LibraryProvider } from './src/library/LibraryProvider';
@@ -36,7 +38,8 @@ import { QueueScreen } from './src/screens/QueueScreen';
 import { color } from './src/theme';
 
 function Shell() {
-  const [destination, setDestination] = useState<Destination>('now-playing');
+  const [destination, setDestination] = useState<Destination>('dashboard');
+  const display = useDisplay();
 
   return (
     <View style={styles.shell}>
@@ -44,14 +47,16 @@ function Shell() {
 
       <View style={styles.stage}>
         <View style={styles.screen}>
-          {destination === 'now-playing' ? (
+          {destination === 'dashboard' ? (
+            <DashboardScreen />
+          ) : destination === 'now-playing' ? (
             <NowPlayingScreen onBrowse={() => setDestination('library')} />
           ) : destination === 'library' ? (
             <LibraryScreen />
           ) : destination === 'queue' ? (
             <QueueScreen onBrowse={() => setDestination('library')} />
           ) : (
-            <AppsScreen />
+            <AppsScreen onOpenWeb={(content) => { display.openWeb(content); setDestination('dashboard'); }} onDashboard={() => setDestination('dashboard')} />
           )}
         </View>
 
@@ -94,7 +99,7 @@ export default function App() {
         <SafeAreaView style={styles.root} edges={['left', 'right', 'bottom']}>
           <LibraryProvider>
             <PlayerProvider>
-              <Shell />
+              <DisplayProvider><Shell /></DisplayProvider>
             </PlayerProvider>
           </LibraryProvider>
         </SafeAreaView>

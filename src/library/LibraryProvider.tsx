@@ -7,6 +7,7 @@
  * experience.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState } from 'react-native';
 import React, {
   createContext,
   useCallback,
@@ -33,6 +34,7 @@ export type LibraryStatus =
   | 'idle'
   | 'requesting-permission'
   | 'denied'
+  | 'error'
   | 'scanning'
   | 'ready';
 
@@ -48,6 +50,7 @@ interface LibraryValue {
   untagged: number;
   /** True when Android will not prompt for permission again. */
   permissionBlocked: boolean;
+  error: string | null;
   /** Re-queries MediaStore, keeping tags already read. */
   rescan: () => void;
   /** Prompts for audio access, then scans. */
@@ -70,6 +73,8 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const [tracks, setTracks] = useState<Track[]>([]);
   const [found, setFound] = useState(0);
   const [permissionBlocked, setPermissionBlocked] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const checkingPermission = useRef(false);
 
   /** Aborts an in-flight scan or tag pass when a new one starts, or on unmount. */
   const runRef = useRef<AbortController | null>(null);
@@ -115,7 +120,11 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       runRef.current?.abort();
       const controller = new AbortController();
       runRef.current = controller;
+      pendingTags.current = [];
+      if (flushTimer.current !== null) clearTimeout(flushTimer.current);
+      flushTimer.current = null;
 
+      setError(null);
       setStatus('scanning');
       setFound(previous.length);
 
@@ -143,43 +152,74 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
           persist(current);
           return current;
         });
-      } catch {
-        // A failed scan leaves whatever was cached on screen.
-        if (!controller.signal.aborted) setStatus('ready');
+      } catch (cause) {
+        if (!controller.signal.aborted) {
+          setError(cause instanceof Error ? cause.message : 'No se pudo leer la biblioteca.');
+          setStatus('error');
+        }
       }
     },
     [flushTags, persist, queueTagFlush]
   );
 
   const grantAccess = useCallback(() => {
+    if (checkingPermission.current) return;
+    checkingPermission.current = true;
     void (async () => {
-      setStatus('requesting-permission');
-      const { granted, blocked } = await requestAudioPermission();
-      setPermissionBlocked(blocked);
-
-      if (!granted) {
-        setStatus('denied');
-        return;
+      try {
+        setError(null);
+        setStatus('requesting-permission');
+        const { granted, blocked } = await requestAudioPermission();
+        setPermissionBlocked(blocked);
+        if (!granted) {
+          runRef.current?.abort();
+          setStatus('denied');
+          return;
+        }
+        await runScan([]);
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : 'No se pudo solicitar el permiso.');
+        setStatus('error');
+      } finally {
+        checkingPermission.current = false;
       }
-      await runScan([]);
     })();
   }, [runScan]);
 
-  const rescan = useCallback(() => {
+  const rescan = useCallback((prompt = true) => {
+    if (checkingPermission.current) return;
+    checkingPermission.current = true;
     void (async () => {
-      const { granted, blocked } = await requestAudioPermission();
-      setPermissionBlocked(blocked);
-      if (!granted) {
-        setStatus('denied');
-        return;
+      try {
+        setError(null);
+        const { granted, blocked } = await requestAudioPermission(prompt);
+        if (prompt || granted) setPermissionBlocked(blocked);
+        if (!granted) {
+          runRef.current?.abort();
+          setStatus('denied');
+          return;
+        }
+        await runScan(tracks);
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : 'No se pudo comprobar el permiso.');
+        setStatus('error');
+      } finally {
+        checkingPermission.current = false;
       }
-      await runScan(tracks);
     })();
   }, [runScan, tracks]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') rescan(false);
+    });
+    return () => subscription.remove();
+  }, [rescan]);
 
   // Load the cache, then reconcile against the device.
   useEffect(() => {
     let cancelled = false;
+    checkingPermission.current = true;
 
     void (async () => {
       let cached: Track[] = [];
@@ -201,17 +241,23 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
         setStatus('ready');
       }
 
-      const { granted, blocked } = await requestAudioPermission();
-      if (cancelled) return;
-      setPermissionBlocked(blocked);
-
-      if (!granted) {
-        // Keep showing the cache if we have one; it is still playable.
-        setStatus(cached.length > 0 ? 'ready' : 'denied');
-        return;
+      try {
+        const { granted, blocked } = await requestAudioPermission(false);
+        if (cancelled) return;
+        setPermissionBlocked(blocked);
+        if (!granted) {
+          setStatus('denied');
+          return;
+        }
+        await runScan(cached);
+      } catch (cause) {
+        if (!cancelled) {
+          setError(cause instanceof Error ? cause.message : 'No se pudo comprobar el permiso.');
+          setStatus('error');
+        }
+      } finally {
+        checkingPermission.current = false;
       }
-
-      await runScan(cached);
     })();
 
     return () => {
@@ -244,11 +290,12 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       found,
       untagged,
       permissionBlocked,
+      error,
       rescan,
       grantAccess,
       byId,
     }),
-    [status, tracks, tree, found, untagged, permissionBlocked, rescan, grantAccess, byId]
+    [status, tracks, tree, found, untagged, permissionBlocked, error, rescan, grantAccess, byId]
   );
 
   return (

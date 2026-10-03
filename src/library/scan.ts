@@ -13,10 +13,13 @@
  * launch instead of thirty seconds after launch.
  */
 import * as MediaLibrary from 'expo-media-library/legacy';
+import { PermissionsAndroid, Platform } from 'react-native';
 
+import { device, type AudioAsset } from '../launcher/device';
 import { folderOf, stripExtension } from '../lib/format';
 import { readTags } from '../lib/id3';
 import type { Track } from '../types';
+import { audioPermissionFor } from './permissions';
 
 /** MediaStore page size. Large enough that a big library is a few queries. */
 const PAGE_SIZE = 500;
@@ -67,19 +70,30 @@ export interface PermissionResult {
  * Only the audio permission is requested — asking for photo and video access
  * in a music player is the kind of thing that makes people say no.
  */
-export async function requestAudioPermission(): Promise<PermissionResult> {
+export async function requestAudioPermission(prompt = true): Promise<PermissionResult> {
+  if (Platform.OS === 'android') {
+    const permission = audioPermissionFor(Number(Platform.Version));
+    if (await PermissionsAndroid.check(permission)) return { granted: true, blocked: false };
+    if (!prompt) return { granted: false, blocked: false };
+    const result = await PermissionsAndroid.request(permission);
+    return {
+      granted: result === PermissionsAndroid.RESULTS.GRANTED,
+      blocked: result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN,
+    };
+  }
   const current = await MediaLibrary.getPermissionsAsync(false, ['audio']);
   if (current.granted) return { granted: true, blocked: false };
 
   if (!current.canAskAgain) {
     return { granted: false, blocked: true };
   }
+  if (!prompt) return { granted: false, blocked: false };
 
   const asked = await MediaLibrary.requestPermissionsAsync(false, ['audio']);
   return { granted: asked.granted, blocked: !asked.granted && !asked.canAskAgain };
 }
 
-function toTrack(asset: MediaLibrary.Asset): Track {
+function toTrack(asset: AudioAsset | MediaLibrary.Asset): Track {
   return {
     id: asset.id,
     uri: asset.uri,
@@ -87,7 +101,7 @@ function toTrack(asset: MediaLibrary.Asset): Track {
     folder: folderOf(asset.uri),
     // MediaStore reports audio duration in seconds already.
     duration: Number.isFinite(asset.duration) ? asset.duration : 0,
-    addedAt: asset.creationTime ?? asset.modificationTime ?? 0,
+    addedAt: asset.creationTime ?? 0,
     title: stripExtension(asset.filename),
     artist: null,
     album: null,
@@ -121,7 +135,11 @@ export async function scanTracks(options: {
   while (hasNextPage) {
     if (signal?.aborted) return tracks;
 
-    const page = await MediaLibrary.getAssetsAsync({
+    const useReadOnlyScan = Platform.OS === 'android' && Number(Platform.Version) < 33;
+    if (useReadOnlyScan && !device) {
+      throw new Error('Instala el nuevo APK para activar el acceso a audio en este Android.');
+    }
+    const page = useReadOnlyScan ? await device!.getAudioPage(Number(after ?? 0), PAGE_SIZE) : await MediaLibrary.getAssetsAsync({
       mediaType: [MediaLibrary.MediaType.audio],
       first: PAGE_SIZE,
       after,
@@ -141,7 +159,7 @@ export async function scanTracks(options: {
     after = page.endCursor;
   }
 
-  return tracks;
+  return tracks.sort((a, b) => b.addedAt - a.addedAt);
 }
 
 /**

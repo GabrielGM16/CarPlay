@@ -11,7 +11,7 @@
  * has, and making them open a folder first to get at it would be wrong.
  */
 import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { usePlayer } from '../audio/PlayerProvider';
 import { EmptyState } from '../components/EmptyState';
@@ -30,7 +30,11 @@ type Row =
   | { kind: 'folder'; folder: FolderNode }
   | { kind: 'track'; track: Track; index: number };
 
-export function LibraryScreen() {
+function openPermissionSettings() {
+  void Linking.openSettings().catch(() => Alert.alert('Ajustes', 'Abre Ajustes → Apps → Console → Permisos.'));
+}
+
+export function LibraryScreen({ compact = false }: { compact?: boolean }) {
   const library = useLibrary();
   const player = usePlayer();
 
@@ -132,17 +136,31 @@ export function LibraryScreen() {
 
   // ------------------------------------------------------------ empty states
 
+  if (library.status === 'idle' || library.status === 'requesting-permission') {
+    return <EmptyState icon="folder" title="Preparando biblioteca" detail="Espera a que Android compruebe el acceso al audio." />;
+  }
+
+  if (library.status === 'error') {
+    return <EmptyState icon="folder" title="No se pudo leer la música" detail={library.error ?? 'Vuelve a intentarlo.'} action={{ label: 'Reintentar', onPress: library.rescan }} />;
+  }
+
   if (library.status === 'denied') {
     return (
       <EmptyState
         icon="folder"
-        title="No access to your music"
+        title="Permite el acceso a tu música"
         detail={
           library.permissionBlocked
-            ? 'Android is not asking again. Open Settings, then Permissions, and allow Music and audio.'
-            : 'Allow access to audio files and the library will fill itself in.'
+            ? 'Abre Permisos y activa Música y audio, o Almacenamiento en Android antiguo.'
+            : 'Autoriza la lectura del audio del almacenamiento interno o la tarjeta SD.'
         }
-        action={{ label: 'Allow access', onPress: library.grantAccess }}
+        action={{
+          label: library.permissionBlocked ? 'Abrir Ajustes' : 'Permitir acceso',
+          onPress: library.permissionBlocked
+            ? openPermissionSettings
+            : library.grantAccess,
+        }}
+        secondaryAction={!library.permissionBlocked ? { label: 'Abrir Ajustes', onPress: openPermissionSettings } : undefined}
       />
     );
   }
@@ -230,7 +248,7 @@ export function LibraryScreen() {
 
       <Seam />
 
-      <SectionHeader
+      {!compact ? <SectionHeader
         title={folder.name}
         meta={`${trackCount(folder.totalTracks)} · ${runtime}`}
         action={
@@ -249,7 +267,7 @@ export function LibraryScreen() {
             />
           </View>
         }
-      />
+      /> : null}
 
       <FlatList
         data={rows}
@@ -264,7 +282,7 @@ export function LibraryScreen() {
         contentContainerStyle={styles.list}
       />
 
-      {library.untagged > 0 ? (
+      {!compact && library.untagged > 0 ? (
         <Text style={styles.tagging}>
           Reading tags — {library.untagged} to go
         </Text>

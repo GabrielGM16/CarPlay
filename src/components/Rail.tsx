@@ -1,23 +1,20 @@
 /**
- * The side rail: the app's four destinations, as fixed keys.
- *
- * A head unit has hard buttons down one side and this is their counterpart —
- * always in the same place, never scrolling, never hidden behind a menu. Four
- * is the whole app, so there is no overflow and no "more" key.
+ * Scrollable destinations keep every key reachable on short head-unit screens.
  */
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet } from 'react-native';
 
 import { Key } from './Key';
 import type { GlyphName } from './Glyph';
 import { color, space } from '../theme';
 
-export type Destination = 'now-playing' | 'library' | 'queue' | 'apps';
+export type Destination = 'dashboard' | 'now-playing' | 'library' | 'queue' | 'apps';
 
 const DESTINATIONS: { id: Destination; icon: GlyphName; label: string }[] = [
-  { id: 'now-playing', icon: 'gauge', label: 'Playing' },
-  { id: 'library', icon: 'folder', label: 'Library' },
-  { id: 'queue', icon: 'queue', label: 'Queue' },
+  { id: 'dashboard', icon: 'split', label: 'Paneles' },
+  { id: 'now-playing', icon: 'gauge', label: 'Música' },
+  { id: 'library', icon: 'folder', label: 'Biblioteca' },
+  { id: 'queue', icon: 'queue', label: 'Cola' },
   { id: 'apps', icon: 'apps', label: 'Apps' },
 ];
 
@@ -29,7 +26,7 @@ export function Rail({
   onSelect: (destination: Destination) => void;
 }) {
   return (
-    <View style={styles.rail}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.rail} showsVerticalScrollIndicator={false}>
       {DESTINATIONS.map((destination) => (
         <Key
           key={destination.id}
@@ -41,11 +38,12 @@ export function Rail({
           onPress={() => onSelect(destination.id)}
         />
       ))}
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  container: { flexGrow: 0, backgroundColor: color.graphite, borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: color.seam },
   rail: {
     paddingHorizontal: space.md,
     paddingVertical: space.lg,
