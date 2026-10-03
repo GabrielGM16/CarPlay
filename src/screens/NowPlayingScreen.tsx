@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { usePlayer } from '../audio/PlayerProvider';
 import { useSpectrum } from '../audio/useSpectrum';
+import { systemSpectrumSupported, useSystemAudioPermission, useSystemSpectrum } from '../audio/useSystemSpectrum';
 import { upcomingTracks } from '../audio/queue';
 import { EmptyState } from '../components/EmptyState';
 import { Gauge } from '../components/Gauge';
@@ -21,8 +22,15 @@ export function NowPlayingScreen({ onBrowse, compact = false }: NowPlayingScreen
   const player = usePlayer();
   const display = useDisplay();
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const spectrum = useSpectrum(player.analyser, player.isPlaying && display.musicStyle === 'dial', player.analyserEpoch);
   const track = player.track;
+  const local = useSpectrum(player.analyser, player.isPlaying && display.musicStyle === 'dial', player.analyserEpoch);
+  // When our own player is quiet, the dial follows whatever else the tablet
+  // is playing: a YouTube panel, Spotify in split screen.
+  const [wavesGranted, requestWaves] = useSystemAudioPermission();
+  const followSystem = wavesGranted && !player.isPlaying && (!track || display.musicStyle === 'dial');
+  const system = useSystemSpectrum(followSystem);
+  const spectrum = player.isPlaying ? local : system;
+  const gaugeActive = player.isPlaying || (followSystem && system.available);
   const next = upcomingTracks(player.queue)[0] ?? null;
   const artworkSize = Math.max(40, Math.min(size.height - 24, size.width * (compact ? 0.32 : 0.42), 360));
   const tight = compact || size.width < 600 || size.height < 220;
@@ -46,9 +54,28 @@ export function NowPlayingScreen({ onBrowse, compact = false }: NowPlayingScreen
           </ScrollView>
         )}
       </View>
-      {!track ? <EmptyState icon="note" title="Tu música, a tu estilo" detail="Abre la biblioteca y elige una canción." action={{ label: 'Abrir biblioteca', onPress: onBrowse }} /> : (
+      {!track && followSystem && system.available ? (
         <View style={[styles.body, tight && styles.tightBody]} onLayout={({ nativeEvent }) => setSize(nativeEvent.layout)}>
-          {display.musicStyle === 'dial' ? <Gauge size={artworkSize} artwork={track.artwork} spectrum={spectrum} active={player.isPlaying} /> : (
+          <Gauge size={artworkSize} artwork={null} spectrum={system} active />
+          <View style={styles.text}>
+            <Text style={styles.status}>AUDIO DE LA TABLET</Text>
+            <Text style={[styles.title, tight && styles.smallTitle]} numberOfLines={2}>Lo que suene en YouTube u otras apps</Text>
+            <Pressable accessibilityRole="button" onPress={onBrowse} style={styles.link}>
+              <Text style={styles.linkLabel}>Abrir biblioteca</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : !track ? (
+        <EmptyState
+          icon="note"
+          title="Tu música, a tu estilo"
+          detail="Abre la biblioteca y elige una canción."
+          action={{ label: 'Abrir biblioteca', onPress: onBrowse }}
+          secondaryAction={systemSpectrumSupported && !wavesGranted ? { label: 'Ver ondas con YouTube y otras apps', onPress: requestWaves } : undefined}
+        />
+      ) : (
+        <View style={[styles.body, tight && styles.tightBody]} onLayout={({ nativeEvent }) => setSize(nativeEvent.layout)}>
+          {display.musicStyle === 'dial' ? <Gauge size={artworkSize} artwork={track.artwork} spectrum={spectrum} active={gaugeActive} /> : (
             <View style={[styles.artwork, { width: artworkSize, height: artworkSize }]}>
               {track.artwork ? <Image source={{ uri: track.artwork }} style={styles.backdrop} contentFit="cover" /> : <Glyph name="note" size={artworkSize * 0.35} color={color.dial} />}
             </View>
@@ -82,5 +109,7 @@ const styles = StyleSheet.create({
   smallTitle: { ...type.subtitle },
   artist: { ...type.body, color: color.illum },
   album: { ...type.label, color: color.dim },
+  link: { minHeight: 48, justifyContent: 'center', alignSelf: 'flex-start' },
+  linkLabel: { ...type.label, color: color.dial },
   next: { marginTop: 24, borderTopWidth: 1, borderTopColor: color.seam, paddingTop: 12, gap: 4 },
 });

@@ -20,6 +20,7 @@ import { folderOf, stripExtension } from '../lib/format';
 import { readTags } from '../lib/id3';
 import type { Track } from '../types';
 import { audioPermissionFor } from './permissions';
+import { isPlayable } from './playable';
 
 /** MediaStore page size. Large enough that a big library is a few queries. */
 const PAGE_SIZE = 500;
@@ -27,36 +28,7 @@ const PAGE_SIZE = 500;
 /** How many files to read tags from per batch before yielding to the UI. */
 const TAG_BATCH_SIZE = 12;
 
-/**
- * Extensions we hand to the audio engine. MediaStore occasionally reports
- * ringtones and voice memos in containers the decoder will not open, and a
- * track that fails to load is worse than one that was never listed.
- */
-const PLAYABLE = new Set([
-  'mp3',
-  'm4a',
-  'aac',
-  'flac',
-  'wav',
-  'ogg',
-  'oga',
-  'opus',
-  'mp4',
-  'm4b',
-  'wma',
-  'aiff',
-  'aif',
-  'mka',
-]);
-
-function extensionOf(filename: string): string {
-  const dot = filename.lastIndexOf('.');
-  return dot === -1 ? '' : filename.slice(dot + 1).toLowerCase();
-}
-
-export function isPlayable(filename: string): boolean {
-  return PLAYABLE.has(extensionOf(filename));
-}
+export { isPlayable };
 
 export interface PermissionResult {
   granted: boolean;

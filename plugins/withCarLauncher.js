@@ -41,6 +41,10 @@ function withLauncherIntent(config) {
       );
     }
 
+    // Android 10 has scoped storage but no all-files permission; this opt-out
+    // is what lets the file explorer list folders there.
+    app.$['android:requestLegacyExternalStorage'] = 'true';
+
     // Android tiles only activities that declare themselves resizeable.
     activity.$['android:resizeableActivity'] = 'true';
     // A home app must not stack copies of itself when HOME is pressed.

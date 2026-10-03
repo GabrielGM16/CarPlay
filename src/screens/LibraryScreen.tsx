@@ -20,6 +20,7 @@ import { Key } from '../components/Key';
 import { SectionHeader, Seam } from '../components/Panel';
 import { TrackRow } from '../components/TrackRow';
 import { useLibrary } from '../library/LibraryProvider';
+import { FilesScreen } from './FilesScreen';
 import { collectTracks, findFolder, pathToFolder } from '../library/tree';
 import { formatRuntime, prettyPath, trackCount } from '../lib/format';
 import { color, radius, space, TOUCH, type } from '../theme';
@@ -34,7 +35,35 @@ function openPermissionSettings() {
   void Linking.openSettings().catch(() => Alert.alert('Ajustes', 'Abre Ajustes → Apps → Console → Permisos.'));
 }
 
+type Source = 'library' | 'files';
+
+/**
+ * Two ways into the same music: the indexed library, with tags and artwork,
+ * or the raw folders on disk for anything Android has not indexed.
+ */
 export function LibraryScreen({ compact = false }: { compact?: boolean }) {
+  const [source, setSource] = useState<Source>('library');
+  return (
+    <View style={styles.wrap}>
+      <View style={styles.tabs} accessibilityRole="tablist">
+        {([['library', 'Biblioteca'], ['files', 'Archivos']] as const).map(([id, label]) => (
+          <Pressable
+            key={id}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: source === id }}
+            onPress={() => setSource(id)}
+            style={[styles.tab, source === id && styles.tabSelected]}
+          >
+            <Text style={[styles.tabLabel, source === id && styles.tabLabelSelected]}>{label}</Text>
+          </Pressable>
+        ))}
+      </View>
+      {source === 'library' ? <LibraryBrowser compact={compact} /> : <FilesScreen />}
+    </View>
+  );
+}
+
+function LibraryBrowser({ compact }: { compact: boolean }) {
   const library = useLibrary();
   const player = usePlayer();
 
@@ -302,6 +331,28 @@ export function LibraryScreen({ compact = false }: { compact?: boolean }) {
 const styles = StyleSheet.create({
   wrap: {
     flex: 1,
+  },
+  tabs: {
+    flexDirection: 'row',
+    gap: space.sm,
+    paddingHorizontal: space.md,
+    paddingTop: space.sm,
+  },
+  tab: {
+    minHeight: 48,
+    justifyContent: 'center',
+    paddingHorizontal: space.lg,
+    borderRadius: radius.row,
+  },
+  tabSelected: {
+    backgroundColor: color.dialDeep,
+  },
+  tabLabel: {
+    ...type.label,
+    color: color.dim,
+  },
+  tabLabelSelected: {
+    color: color.illum,
   },
   bar: {
     flexDirection: 'row',

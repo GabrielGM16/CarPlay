@@ -3,12 +3,18 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { WebView } from 'react-native-webview';
 import { color, type } from '../theme';
 import { canNavigateInsidePanel } from '../display/web-policy';
+import { systemSpectrumSupported, useSystemAudioPermission, useSystemSpectrum } from '../audio/useSystemSpectrum';
+import { SpectrumStrip } from './SpectrumStrip';
 
 export function WebPanel({ url }: { url: string }) {
   const browser = useRef<WebView>(null);
   const [failed, setFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [canGoBack, setCanGoBack] = useState(false);
+  // Videos play inside the WebView, out of reach of the player's analyser, so
+  // the strip follows the tablet's whole output instead.
+  const [wavesGranted, requestWaves] = useSystemAudioPermission();
+  const spectrum = useSystemSpectrum(wavesGranted);
   return (
     <View style={styles.wrap}>
       <View style={styles.tools}>
@@ -16,6 +22,11 @@ export function WebPanel({ url }: { url: string }) {
           <Text style={[styles.label, !canGoBack && styles.disabled]}>Atrás</Text>
         </Pressable>
         <Text numberOfLines={1} style={styles.address}>{new URL(url).hostname} · Web</Text>
+        {systemSpectrumSupported && !wavesGranted ? (
+          <Pressable accessibilityRole="button" accessibilityLabel="Mostrar ondas del audio" onPress={requestWaves} style={styles.button}>
+            <Text style={styles.label}>Ondas</Text>
+          </Pressable>
+        ) : null}
         <Pressable accessibilityRole="button" onPress={() => { setFailed(false); browser.current?.reload(); }} style={styles.button}>
           <Text style={styles.label}>Recargar</Text>
         </Pressable>
@@ -30,6 +41,9 @@ export function WebPanel({ url }: { url: string }) {
         // Cancel app intents and popup handoffs so a link stays in the launcher.
         onShouldStartLoadWithRequest={(request) => canNavigateInsidePanel(request.url)}
         setSupportMultipleWindows={false}
+        // Maps needs the device position; the WebView asks Android for
+        // ACCESS_FINE_LOCATION the first time a page requests it.
+        geolocationEnabled
         onNavigationStateChange={(state) => setCanGoBack(state.canGoBack)}
         onLoadStart={() => { setLoading(true); setFailed(false); }}
         onLoadEnd={() => setLoading(false)}
@@ -41,6 +55,7 @@ export function WebPanel({ url }: { url: string }) {
         mediaPlaybackRequiresUserAction
         allowsInlineMediaPlayback
       />
+      {wavesGranted && spectrum.available ? <SpectrumStrip spectrum={spectrum} /> : null}
       {loading ? <ActivityIndicator pointerEvents="none" color={color.dial} style={styles.loading} /> : null}
       {failed ? <View style={styles.error}><Text style={styles.label}>No se pudo cargar. Comprueba internet y pulsa Recargar.</Text></View> : null}
     </View>
