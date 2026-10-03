@@ -8,7 +8,6 @@
     "scheme": "console",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#06070A",
-    "newArchEnabled": true,
     "assetBundlePatterns": [
       "**/*"
     ],
