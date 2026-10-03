@@ -22,12 +22,12 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import {
-  runOnJS,
   useDerivedValue,
   useFrameCallback,
   useSharedValue,
   type SharedValue,
 } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 
 import { formatTime } from '../lib/format';
 import { color, space, TOUCH, type } from '../theme';
@@ -192,7 +192,7 @@ export function DialSeekBar({
       .onBegin((event) => {
         scrubbing.value = true;
         scrubFraction.value = toFraction(event.x);
-        runOnJS(reportScrub)(scrubFraction.value * durationSV.value);
+        scheduleOnRN(reportScrub, scrubFraction.value * durationSV.value);
       })
       .onUpdate((event) => {
         const next = toFraction(event.x);
@@ -201,7 +201,7 @@ export function DialSeekBar({
         const nextSecond = Math.floor(next * durationSV.value);
         // Only cross back to JS when the displayed second actually changes.
         if (nextSecond !== previousSecond) {
-          runOnJS(reportScrub)(nextSecond);
+          scheduleOnRN(reportScrub, nextSecond);
         }
       })
       .onEnd(() => {
@@ -209,11 +209,11 @@ export function DialSeekBar({
         displayed.value = seconds;
         lastReport.value = seconds;
         scrubbing.value = false;
-        runOnJS(commitScrub)(seconds);
+        scheduleOnRN(commitScrub, seconds);
       })
       .onTouchesCancelled(() => {
         scrubbing.value = false;
-        runOnJS(setScrubSeconds)(null);
+        scheduleOnRN(setScrubSeconds, null);
       });
 
     return pan;

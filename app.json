@@ -13,7 +13,7 @@
     ],
     "android": {
       "package": "com.gmofi.console",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
         "backgroundColor": "#06070A",
         "foregroundImage": "./assets/android-icon-foreground.png",
