@@ -162,27 +162,34 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     [flushTags, persist, queueTagFlush]
   );
 
+  // `checkingPermission` guards only the permission request, so a second
+  // prompt cannot stack on the first. It is released before the scan:
+  // `runScan` aborts any pass already running, and holding the guard through
+  // a long tag pass would swallow the user's rescan taps.
   const grantAccess = useCallback(() => {
     if (checkingPermission.current) return;
     checkingPermission.current = true;
     void (async () => {
+      let granted: boolean;
       try {
         setError(null);
         setStatus('requesting-permission');
-        const { granted, blocked } = await requestAudioPermission();
-        setPermissionBlocked(blocked);
-        if (!granted) {
-          runRef.current?.abort();
-          setStatus('denied');
-          return;
-        }
-        await runScan([]);
+        const result = await requestAudioPermission();
+        granted = result.granted;
+        setPermissionBlocked(result.blocked);
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : 'No se pudo solicitar el permiso.');
         setStatus('error');
+        return;
       } finally {
         checkingPermission.current = false;
       }
+      if (!granted) {
+        runRef.current?.abort();
+        setStatus('denied');
+        return;
+      }
+      await runScan([]);
     })();
   }, [runScan]);
 
@@ -190,22 +197,25 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     if (checkingPermission.current) return;
     checkingPermission.current = true;
     void (async () => {
+      let granted: boolean;
       try {
         setError(null);
-        const { granted, blocked } = await requestAudioPermission(prompt);
-        if (prompt || granted) setPermissionBlocked(blocked);
-        if (!granted) {
-          runRef.current?.abort();
-          setStatus('denied');
-          return;
-        }
-        await runScan(tracks);
+        const result = await requestAudioPermission(prompt);
+        granted = result.granted;
+        if (prompt || granted) setPermissionBlocked(result.blocked);
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : 'No se pudo comprobar el permiso.');
         setStatus('error');
+        return;
       } finally {
         checkingPermission.current = false;
       }
+      if (!granted) {
+        runRef.current?.abort();
+        setStatus('denied');
+        return;
+      }
+      await runScan(tracks);
     })();
   }, [runScan, tracks]);
 
@@ -241,23 +251,26 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
         setStatus('ready');
       }
 
+      let granted: boolean;
       try {
-        const { granted, blocked } = await requestAudioPermission(false);
+        const result = await requestAudioPermission(false);
         if (cancelled) return;
-        setPermissionBlocked(blocked);
-        if (!granted) {
-          setStatus('denied');
-          return;
-        }
-        await runScan(cached);
+        granted = result.granted;
+        setPermissionBlocked(result.blocked);
       } catch (cause) {
         if (!cancelled) {
           setError(cause instanceof Error ? cause.message : 'No se pudo comprobar el permiso.');
           setStatus('error');
         }
+        return;
       } finally {
         checkingPermission.current = false;
       }
+      if (!granted) {
+        setStatus('denied');
+        return;
+      }
+      await runScan(cached);
     })();
 
     return () => {

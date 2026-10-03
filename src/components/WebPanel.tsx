@@ -35,7 +35,9 @@ export function WebPanel({ url }: { url: string }) {
         onLoadEnd={() => setLoading(false)}
         onError={() => { setFailed(true); setLoading(false); }}
         onRenderProcessGone={() => { setFailed(true); setLoading(false); }}
-        onHttpError={({ nativeEvent }) => { if (nativeEvent.statusCode >= 400 && nativeEvent.url === url) setFailed(true); }}
+        // Android reports main-frame errors only, and with the redirected URL,
+        // so comparing against `url` would never match.
+        onHttpError={({ nativeEvent }) => { if (nativeEvent.statusCode >= 400) setFailed(true); }}
         mediaPlaybackRequiresUserAction
         allowsInlineMediaPlayback
       />

@@ -140,7 +140,9 @@ export function LibraryScreen({ compact = false }: { compact?: boolean }) {
     return <EmptyState icon="folder" title="Preparando biblioteca" detail="Espera a que Android compruebe el acceso al audio." />;
   }
 
-  if (library.status === 'error') {
+  // With a cached library still on hand, a failed rescan is a note above the
+  // list, not a screen that hides music which still plays.
+  if (library.status === 'error' && library.tracks.length === 0) {
     return <EmptyState icon="folder" title="No se pudo leer la música" detail={library.error ?? 'Vuelve a intentarlo.'} action={{ label: 'Reintentar', onPress: library.rescan }} />;
   }
 
@@ -246,6 +248,12 @@ export function LibraryScreen({ compact = false }: { compact?: boolean }) {
         />
       </View>
 
+      {library.error ? (
+        <Text numberOfLines={2} style={styles.note}>
+          {library.error}
+        </Text>
+      ) : null}
+
       <Seam />
 
       {!compact ? <SectionHeader
@@ -322,6 +330,12 @@ const styles = StyleSheet.create({
   crumbCurrent: {
     ...type.bodyMedium,
     color: color.illum,
+  },
+  note: {
+    ...type.label,
+    color: color.dim,
+    paddingHorizontal: space.md,
+    paddingBottom: space.sm,
   },
   headerKeys: {
     flexDirection: 'row',
